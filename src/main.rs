@@ -12,8 +12,9 @@ use {
     embassy_rp::{
         bind_interrupts,
         gpio::{Input, Level, Output, Pull},
-        peripherals::{DMA_CH0, PIN_11, PIN_3, PIN_5, PIO0, PIO1},
+        peripherals::{DMA_CH0, PIN_11, PIN_3, PIN_5, PIO0, PIO1, UART0},
         pio::{InterruptHandler, Pio},
+        uart::{self, Uart},
     },
     embassy_time::{Duration, Ticker, Timer},
     panic_probe as _,
@@ -35,11 +36,14 @@ async fn main(spawner: Spawner) {
         .spawn(heartbeat(p.PIO0, p.DMA_CH0, p.PIN_5))
         .unwrap();
     spawner.spawn(watch_usr_key(p.PIN_11, p.PIN_3)).unwrap();
-    spawner
-        .spawn(api::serve(
-            spawner, p.PIO1, p.DMA_CH1, p.PIN_23, p.PIN_25, p.PIN_24, p.PIN_29,
-        ))
-        .unwrap();
+    /*spawner
+    .spawn(api::serve(
+        spawner, p.PIO1, p.DMA_CH1, p.PIN_23, p.PIN_25, p.PIN_24, p.PIN_29,
+    ))
+    .unwrap();*/
+
+    Input::new(p.PIN_0, Pull::None);
+    Input::new(p.PIN_1, Pull::None);
 }
 
 #[embassy_executor::task]

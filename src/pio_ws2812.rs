@@ -1,10 +1,9 @@
 use embassy_rp::dma::{AnyChannel, Channel};
-use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::{
-    Common, Config, FifoJoin, Instance, InterruptHandler, PioPin, ShiftConfig, ShiftDirection,
+    Common, Config, FifoJoin, Instance, PioPin, ShiftConfig, ShiftDirection,
     StateMachine,
 };
-use embassy_rp::{bind_interrupts, clocks, into_ref, Peripheral, PeripheralRef};
+use embassy_rp::{clocks, into_ref, Peripheral, PeripheralRef};
 use embassy_time::Timer;
 use fixed::types::U24F8;
 use fixed_macro::fixed;

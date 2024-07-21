@@ -7,7 +7,7 @@ use embassy_net::{tcp::TcpSocket, Config, Stack, StackResources};
 use embassy_rp::{
     clocks::RoscRng,
     gpio::{Level, Output},
-    peripherals::{DMA_CH1, PIN_23, PIN_24, PIN_25, PIN_29, PIO1},
+    peripherals::{DMA_CH0, DMA_CH1, PIN_23, PIN_24, PIN_25, PIN_29, PIO0, PIO1},
     pio::Pio,
 };
 use embassy_time::{Duration, Timer};
@@ -20,7 +20,7 @@ async fn wifi_task(
     runner: cyw43::Runner<
         'static,
         Output<'static, PIN_23>,
-        PioSpi<'static, PIN_25, PIO1, 0, DMA_CH1>,
+        PioSpi<'static, PIN_25, PIO0, 0, DMA_CH0>,
     >,
 ) -> ! {
     runner.run().await
@@ -36,8 +36,8 @@ use crate::Irqs;
 #[embassy_executor::task]
 pub(crate) async fn serve(
     spawner: Spawner,
-    pio_a: PIO1,
-    dma: DMA_CH1,
+    pio_a: PIO0,
+    dma: DMA_CH0,
     pwr_pin: PIN_23,
     cs_pin: PIN_25,
     spi1_pin: PIN_24,
@@ -48,15 +48,15 @@ pub(crate) async fn serve(
     let wifi_network = env!("WIFI_NETWORK");
     let wifi_password = env!("WIFI_PASSWORD");
 
-    let fw = include_bytes!("../cyw43/43439A0.bin");
-    let clm = include_bytes!("../cyw43/43439A0_clm.bin");
+    //let fw = include_bytes!("../cyw43/43439A0.bin");
+    //let clm = include_bytes!("../cyw43/43439A0_clm.bin");
 
     // To make flashing faster for development, you may want to flash the firmwares independently
     // at hardcoded addresses, instead of baking them into the program with `include_bytes!`:
     //     probe-rs download 43439A0.bin --binary-format bin --chip RP2040 --base-address 0x10100000
     //     probe-rs download 43439A0_clm.bin --binary-format bin --chip RP2040 --base-address 0x10140000
-    //let fw = unsafe { core::slice::from_raw_parts(0x10100000 as *const u8, 230321) };
-    //let clm = unsafe { core::slice::from_raw_parts(0x10140000 as *const u8, 4752) };
+    let fw = unsafe { core::slice::from_raw_parts(0x10100000 as *const u8, 230321) };
+    let clm = unsafe { core::slice::from_raw_parts(0x10140000 as *const u8, 4752) };
 
     let pwr = Output::new(pwr_pin, Level::Low);
     let cs = Output::new(cs_pin, Level::High);
@@ -71,15 +71,23 @@ pub(crate) async fn serve(
         dma,
     );
 
+    info!("Init CYW43...");
     static STATE: StaticCell<cyw43::State> = StaticCell::new();
+    info!("A");
     let state = STATE.init(cyw43::State::new());
+    info!("B");
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
+    info!("C");
     unwrap!(spawner.spawn(wifi_task(runner)));
+    info!("D");
 
     control.init(clm).await;
+    info!("E");
     control
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
+
+    info!("CYW43 initialized!");
 
     let config = Config::dhcpv4(Default::default());
     //let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
@@ -100,6 +108,8 @@ pub(crate) async fn serve(
         RESOURCES.init(StackResources::<2>::new()),
         seed,
     ));
+
+    info!("Trying to join network... {}", wifi_network);
 
     unwrap!(spawner.spawn(net_task(stack)));
 
