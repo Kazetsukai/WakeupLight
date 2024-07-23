@@ -12,20 +12,26 @@ use {
     embassy_rp::{
         bind_interrupts,
         gpio::{Input, Level, Output, Pull},
-        peripherals::{DMA_CH0, PIN_11, PIN_3, PIN_5, PIO0, PIO1, UART0},
-        pio::{InterruptHandler, Pio},
-        uart::{self, Uart},
+        peripherals::{DMA_CH0, DMA_CH1, PIN_11, PIN_3, PIN_5, PIO0, PIO1, UART0},
+        pio::{self, Pio},
+        uart::{self, Async, BufferedUart},
     },
     embassy_time::{Duration, Ticker, Timer},
     panic_probe as _,
     pio_ws2812::Ws2812,
     smart_leds::{brightness, gamma, RGB8},
+    static_cell::{ConstStaticCell, StaticCell},
 };
 
 bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => InterruptHandler<PIO0>;
-    PIO1_IRQ_0 => InterruptHandler<PIO1>;
+    PIO0_IRQ_0 => pio::InterruptHandler<PIO0>;
+    PIO1_IRQ_0 => pio::InterruptHandler<PIO1>;
+    UART0_IRQ => uart::BufferedInterruptHandler<UART0>;
 });
+
+static ESP_UART_IN_BUF: ConstStaticCell<[u8; 1024]> = ConstStaticCell::new([0u8; 1024]);
+static ESP_UART_OUT_BUF: ConstStaticCell<[u8; 1024]> = ConstStaticCell::new([0u8; 1024]);
+static ESP_UART: StaticCell<BufferedUart<'static, UART0>> = StaticCell::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -36,14 +42,21 @@ async fn main(spawner: Spawner) {
         .spawn(heartbeat(p.PIO0, p.DMA_CH0, p.PIN_5))
         .unwrap();
     spawner.spawn(watch_usr_key(p.PIN_11, p.PIN_3)).unwrap();
-    /*spawner
-    .spawn(api::serve(
-        spawner, p.PIO1, p.DMA_CH1, p.PIN_23, p.PIN_25, p.PIN_24, p.PIN_29,
-    ))
-    .unwrap();*/
 
-    Input::new(p.PIN_0, Pull::None);
-    Input::new(p.PIN_1, Pull::None);
+    let mut config = uart::Config::default();
+    config.baudrate = 115200;
+    let uart = ESP_UART.init(BufferedUart::new(
+        p.UART0,
+        Irqs,
+        p.PIN_0,
+        p.PIN_1,
+        ESP_UART_IN_BUF.take(),
+        ESP_UART_OUT_BUF.take(),
+        config,
+    ));
+
+    info!("Spawn server task");
+    spawner.spawn(api::serve(spawner, uart)).unwrap();
 }
 
 #[embassy_executor::task]
@@ -79,10 +92,10 @@ async fn heartbeat(pio: PIO0, dma: DMA_CH0, pin: PIN_5) {
     // Loop forever making RGB values and pushing them out to the WS2812.
     let mut ticker = Ticker::every(Duration::from_millis(10));
     loop {
-        for j in (0..255).chain((0..255).rev()) {
+        for j in (0..170).chain((0..170).rev()) {
             gamma(brightness(
                 repeat(RGB8::new(200, 130, 50)).take(NUM_LEDS),
-                j,
+                j + 30,
             ))
             .enumerate()
             .for_each(|(i, d)| data[i] = d);
